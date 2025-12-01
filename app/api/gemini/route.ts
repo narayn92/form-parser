@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     }
 
     // Compute cache key from inputs (limit images to first 3 to keep key size reasonable)
-    const cacheKey = crypto.createHash('sha256').update(JSON.stringify({ pdfImages: (pdfImages||[]).slice(0,3), dimensions, scale })).digest('hex');
+    const cacheKey = crypto.createHash('sha256').update(JSON.stringify({ pdfImages: (pdfImages||[]), dimensions, scale })).digest('hex');
     if (parsedCache.has(cacheKey)) {
       return NextResponse.json({ parsed: parsedCache.get(cacheKey), cached: true });
     }
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       },
     ];
 
-    (pdfImages || []).slice(0, 10).forEach((imgData: string) => {
+    (pdfImages || []).forEach((imgData: string) => {
       // expect data URL
       const data = imgData.split(',')[1] ?? imgData;
       parts.push({
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       });
     });
 
-    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts }] }),

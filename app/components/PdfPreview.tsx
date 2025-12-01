@@ -1,15 +1,84 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import useAppStore from '../store/useAppStore';
 
 type Pos = Map<string, { page: number; x: number; y: number; width: number; height: number }>;
 
-interface Props {
-  pages: string[];
-  fieldPositions: Pos;
-  pdfDimensions?: Array<{ width: number; height: number; dS?: any; renderWidth?: number; renderHeight?: number }>;
-  onCanvasClick: (e: React.MouseEvent<HTMLCanvasElement>, pageIndex: number) => void;
-}
+// PDF preview component displaying pages and overlaying field boxes
+export default function PdfPreview() {
+  const pages = useAppStore((s) => s.pdfPages);
+  const fieldPositions = useAppStore((s) => s.fieldPositions);
+  const pdfDimensions = useAppStore((s) => s.pdfDimensions);
+  const highlightedField = useAppStore((s) => s.highlightedField);
+  const setHighlightedField = useAppStore((s) => s.setHighlightedField);
 
-export default function PdfPreview({ pages, fieldPositions, pdfDimensions, onCanvasClick }: Props) {
+  // Draw/redraw boxes on canvases when pages, positions, or highlight changes
+  useEffect(() => {
+    const canvases = document.querySelectorAll('canvas[id^="pdf-canvas-"]');
+    canvases.forEach((canvasElement) => {
+      const canvas = canvasElement as HTMLCanvasElement;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Clear
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw orange boxes for all fields on this page
+      Array.from(fieldPositions.entries()).forEach(([name, pos]) => {
+        const pageIndex = parseInt(canvas.id.split('-')[2]);
+        if (pos.page === pageIndex) {
+          ctx.strokeStyle = '#FFA500';
+          ctx.lineWidth = 3;
+          ctx.setLineDash([5, 5]);
+          ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
+          ctx.setLineDash([]);
+        }
+      });
+
+      // If highlighted field on this page, draw red thicker stroke
+      if (highlightedField) {
+        const pos = fieldPositions.get(highlightedField);
+        if (pos && pos.page === parseInt(canvas.id.split('-')[2])) {
+          ctx.strokeStyle = '#FF0000';
+          ctx.lineWidth = 6;
+          ctx.setLineDash([10, 5]);
+          ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
+          ctx.setLineDash([]);
+        }
+      }
+    });
+  }, [pages, fieldPositions, highlightedField]);
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>, pageIndex: number) => {
+    const canvas = e.currentTarget as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    for (const [name, pos] of fieldPositions.entries()) {
+      if (pos.page === pageIndex) {
+        if (x >= pos.x && x <= pos.x + pos.width && y >= pos.y && y <= pos.y + pos.height) {
+          setHighlightedField(name);
+          // Try to focus corresponding input in form
+          const el = document.querySelector(`[data-field-name="${name}"]`) as HTMLElement | null;
+          if (el) {
+            try {
+              (el as HTMLInputElement).focus?.();
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch (err) {
+                console.error('Error focusing form field:', err);
+            }
+          }
+          return;
+        }
+      }
+    }
+
+    // If no field hit, clear highlight
+    setHighlightedField(null);
+  };
+
   return (
     <div className="flex-1 flex flex-col gap-2 overflow-hidden">
       <h3 className="font-semibold">Preview</h3>
@@ -39,25 +108,33 @@ export default function PdfPreview({ pages, fieldPositions, pdfDimensions, onCan
                     const img = e.currentTarget as HTMLImageElement;
                     const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
                     if (canvas && img.parentElement) {
-                      // Match rendered image dimensions
                       canvas.style.width = img.offsetWidth + 'px';
                       canvas.style.height = img.offsetHeight + 'px';
-
-                      // Set internal resolution to match natural image size
                       canvas.width = img.naturalWidth;
                       canvas.height = img.naturalHeight;
-
+                      // redraw after sizing
                       const ctx = canvas.getContext('2d');
                       if (ctx) {
                         Array.from(fieldPositions.entries()).forEach(([name, pos]) => {
                           if (pos.page === index) {
-                            ctx.strokeStyle = '#FFA500'; // Orange
+                            ctx.strokeStyle = '#FFA500';
                             ctx.lineWidth = 3;
                             ctx.setLineDash([5, 5]);
                             ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
                             ctx.setLineDash([]);
                           }
                         });
+                        // highlight if needed
+                        if (highlightedField) {
+                          const pos = fieldPositions.get(highlightedField);
+                          if (pos && pos.page === index) {
+                            ctx.strokeStyle = '#FF0000';
+                            ctx.lineWidth = 6;
+                            ctx.setLineDash([10, 5]);
+                            ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
+                            ctx.setLineDash([]);
+                          }
+                        }
                       }
                     }
                   }}
@@ -66,7 +143,7 @@ export default function PdfPreview({ pages, fieldPositions, pdfDimensions, onCan
                   id={canvasId}
                   className="absolute top-0 left-0 border rounded"
                   style={{ cursor: 'pointer' }}
-                  onClick={(e) => onCanvasClick(e, index)}
+                  onClick={(e) => handleCanvasClick(e as any, index)}
                 />
               </div>
             </div>

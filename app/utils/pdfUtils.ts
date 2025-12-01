@@ -1,5 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
+// Utility function to render PDF file and extract page images and dimensions
 export async function renderPdfFile(file: File, renderScale = 2) {
   return new Promise<{ pages: string[]; dimensions: Array<{ width: number; height: number; dS: any; renderWidth?: number; renderHeight?: number }> }>((resolve, reject) => {
     const reader = new FileReader();

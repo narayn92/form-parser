@@ -1,16 +1,46 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import useAppStore from '../store/useAppStore';
 
-interface Props {
-  pdfFile: File | null;
-  pdfPagesLength: number;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  openFilePicker: () => void;
-  handleDrop: (e: React.DragEvent<HTMLDivElement>) => void;
-  handleDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
-  handleFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}
+// PDF upload component with drag-and-drop and file picker
+export default function PdfUpload() {
+  const pdfFile = useAppStore((s) => s.pdfFile);
+  const pdfPagesLength = useAppStore((s) => s.pdfPages.length);
+  const processPdf = useAppStore((s) => s.processPdf);
 
-export default function PdfUpload({ pdfFile, pdfPagesLength, fileInputRef, openFilePicker, handleDrop, handleDragOver, handleFileInputChange }: Props) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const openFilePicker = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = e.dataTransfer.files;
+    if (files && files[0]) {
+      const file = files[0];
+      if (file.type === 'application/pdf') {
+        await processPdf(file);
+      }
+    }
+  };
+
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files[0]) {
+      const file = files[0];
+      if (file.type === 'application/pdf') {
+        await processPdf(file);
+      }
+    }
+  };
+
   return (
     <div>
       <h2 className="text-2xl font-bold">PDF Upload</h2>
