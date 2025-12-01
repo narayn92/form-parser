@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { LRUCache } from 'lru-cache';
 
-// Simple in-memory cache for parsed Gemini responses keyed by request payload hash
-const parsedCache = new Map<string, any>();
+const parsedCache = new LRUCache<string, any>({
+  max: 100, // max 100 entries
+  ttl: 30 * 60 * 1000, // 30 minutes TTL
+});
 
 export async function POST(req: Request) {
   try {
@@ -14,11 +17,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Gemini API key not configured on server' }, { status: 500 });
     }
 
-    // Compute cache key from inputs (limit images to first 3 to keep key size reasonable)
+    // Compute cache key from inputs
     const cacheKey = crypto.createHash('sha256').update(JSON.stringify({ pdfImages: (pdfImages||[]), dimensions, scale })).digest('hex');
-    if (parsedCache.has(cacheKey)) {
-      return NextResponse.json({ parsed: parsedCache.get(cacheKey), cached: true });
-    }
+    const cached = parsedCache.get(cacheKey);
+    if (cached) return NextResponse.json({ parsed: cached, cached: true });
 
     // Build parts for Gemini request (prompt + images)
     const parts: any[] = [

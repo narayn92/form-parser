@@ -53,7 +53,7 @@ app/
 │   ├── geminiClient.ts   # AI analysis integration
 │   └── dateUtils.ts      # Date format converters
 └── api/
-    └── gemini/route.ts   # API route for Gemini calls with caching
+   └── gemini/route.ts   # API route for Gemini calls with LRU+TTL caching (via lru-cache)
 ```
 
 ### Workflow
@@ -61,8 +61,8 @@ app/
 1. **Upload PDF**: User uploads a PDF via drag-and-drop or file picker
 2. **Process PDF**: 
    - PDF is converted to images using PDF.js
-   - Images are sent to Gemini API endpoint (checks cache first)
-   - Cache hit returns instant results, cache miss triggers AI analysis
+   - Images are sent to Gemini API endpoint (LRU cache checked first)
+   - Cache hit returns instant results; cache miss triggers AI analysis and stores the result with a 30-minute TTL
 3. **Extract Fields**: AI identifies form fields with:
    - Field name and type (text, checkbox, date, etc.)
    - Bounding box coordinates
@@ -80,7 +80,7 @@ app/
 - **Separate Loading States**: Distinct `loading` (PDF processing) and `submitting` (form submission) states for better UX
 - **Component Isolation**: Each component manages its own UI logic while reading from the shared store
 - **Type Safety**: TypeScript interfaces ensure data consistency across components
-- **Response Caching**: In-memory cache for Gemini API responses using SHA-256 hash of request payload (PDF images + dimensions) to avoid redundant AI calls for identical PDFs
+- **Response Caching**: LRU in-memory cache with a 30-minute TTL keyed by a SHA-256 of the request payload (PDF images + dimensions + scale) to avoid redundant AI calls
 
 ## Setup
 
@@ -133,16 +133,17 @@ npm start
 ## Performance Optimizations
 
 ### API Response Caching
-The Gemini API route implements an in-memory cache to avoid redundant AI calls:
+The Gemini API route implements an LRU in-memory cache with TTL (powered by the `lru-cache` npm package) to avoid redundant AI calls:
 
-- **Cache Key**: SHA-256 hash of request payload (PDF images + dimensions + scale)
-- **Storage**: Simple Map-based in-memory cache (resets on server restart)
+- **Cache Key**: SHA-256 hash of request payload (first 3 PDF images + dimensions + scale)
+- **Policy**: Least-Recently-Used eviction with a 30 minute TTL per entry
+- **Capacity**: Max 100 entries
+- **Storage**: In-memory (resets on server restart)
 - **Benefits**: 
-  - Instant responses for re-uploaded identical PDFs
-  - Reduced API costs and latency
-  - Better user experience during development/testing
+   - Instant responses for re-uploaded identical PDFs within TTL of 30 minutes
+   - Reduced API costs and latency
+   - Better user experience during development/testing
 
-**Note**: For production with multiple server instances, consider using Redis or another distributed cache.
 
 ## Environment Variables
 
